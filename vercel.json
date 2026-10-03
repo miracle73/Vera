@@ -5,6 +5,6 @@
   "buildCommand": "",
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://vera-api.onrender.com/api/:path*" }
+    { "source": "/api/:path*", "destination": "https://vera-api-jjts.onrender.com/api/:path*" }
   ]
 }

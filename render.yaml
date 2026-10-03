@@ -11,7 +11,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: PUBLIC_URL
-        value: https://vera-api.onrender.com
+        value: https://vera-api-jjts.onrender.com
       - key: PAYMENT_PROVIDER
         value: paystack
       - key: STORE_CURRENCY
