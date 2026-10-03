@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Product · Vera</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="announce">Free delivery on orders over ₦50,000 · Use code WELCOME10 for 10% off</div>
+  <div class="wrap">
+    <header class="header">
+      <a href="/" class="logo">vera</a>
+      <nav class="nav">
+        <a href="/#shop">Shop all</a>
+        <a href="/cart.html" class="bag-link">Bag <span class="bag-count">0</span></a>
+      </nav>
+    </header>
+
+    <main id="main"><p class="empty">Loading…</p></main>
+    <footer class="footer">© Vera Wellness · Secure payments by Paystack</footer>
+  </div>
+
+  <script src="/app.js"></script>
+  <script type="module" src="/voice.js"></script>
+  <script>
+    const id = new URLSearchParams(location.search).get("id");
+    const main = document.getElementById("main");
+    let qty = 1;
+
+    Vera.init().then(async () => {
+      try {
+        const { product: p } = await Vera.api("/api/shop/products/" + encodeURIComponent(id || ""));
+        document.title = `${p.name} · Vera`;
+        main.innerHTML = `<section class="pdp">
+          <div class="art" style="${Vera.tint(p.color)}">${Vera.art(p)}</div>
+          <div>
+            <span class="tag">${Vera.esc(p.category)}</span>
+            <h1>${Vera.esc(p.name)}</h1>
+            <p class="lead">${Vera.esc(p.tagline)}</p>
+            <p class="desc">${Vera.esc(p.description)}</p>
+            <span class="price">${Vera.money(p.price)}</span>
+            <div class="buy-row">
+              <div class="qty"><button id="dec" aria-label="Decrease">−</button><span id="q">1</span><button id="inc" aria-label="Increase">+</button></div>
+              <button class="btn" id="add" ${p.stock < 1 ? "disabled" : ""}>${p.stock < 1 ? "Sold out" : "Add to bag"}</button>
+            </div>
+            <ul class="perks">
+              <li>Formulated with clinically studied ingredients</li>
+              <li>Delivered in 2–4 business days</li>
+              <li>${p.stock > 0 && p.stock < 20 ? `Only ${p.stock} left in stock` : "In stock and ready to ship"}</li>
+            </ul>
+          </div>
+        </section>`;
+        const q = document.getElementById("q");
+        document.getElementById("dec").onclick = () => { qty = Math.max(1, qty - 1); q.textContent = qty; };
+        document.getElementById("inc").onclick = () => { qty = Math.min(p.stock, 99, qty + 1); q.textContent = qty; };
+        document.getElementById("add").onclick = () => Vera.addToCart(p, qty);
+      } catch (e) {
+        main.innerHTML = `<div class="status"><h1>Product not found</h1><p>${Vera.esc(e.message)}</p><a class="btn" href="/">Back to shop</a></div>`;
+      }
+    });
+  </script>
+</body>
+</html>

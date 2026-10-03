@@ -3,8 +3,8 @@
   "name": "Vera - Order Processing Agent",
   "firstMessage": "Hello! I'm Vera, your order processing assistant. How can I help you today? Are you looking to place a new order?",
   "model": {
-    "provider": "openai",
-    "model": "gpt-4o-mini",
+    "provider": "openrouter",
+    "model": "openai/gpt-4o-mini",
     "temperature": 0.7,
     "messages": [
       {

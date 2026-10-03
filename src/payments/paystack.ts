@@ -18,12 +18,15 @@ export async function initializeTransaction(
   metadata: Record<string, string>
 ): Promise<PaymentInitResult> {
   const amountInKobo = Math.round(amountInDollars * 100);
+  const email = metadata.email || config.store.fallbackEmail;
 
   const { data } = await axios.post(
     `${PAYSTACK_BASE}/transaction/initialize`,
     {
       amount: amountInKobo,
-      currency: "USD",
+      email,
+      currency: config.store.currency,
+      callback_url: metadata.callbackUrl || `${config.publicUrl}/payment/success`,
       metadata: {
         ...metadata,
         cancel_action: `${config.publicUrl}/payment/cancelled`,
@@ -43,7 +46,7 @@ export async function initializeTransaction(
     provider: "paystack",
     reference: data.data.reference,
     checkoutUrl: data.data.authorization_url,
-    message: `Payment of $${amountInDollars.toFixed(2)} initialized. Visit the payment link to complete.`,
+    message: `Payment of ${config.store.currency} ${amountInDollars.toFixed(2)} initialized. Visit the payment link to complete.`,
   };
 }
 
@@ -90,7 +93,7 @@ export async function verifyTransaction(
   reference: string
 ): Promise<PaymentVerificationResult> {
   const { data } = await axios.get(
-    `${PAYSTACK_BASE}/transaction/verify/${reference}`,
+    `${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`,
     { headers: getHeaders() }
   );
 

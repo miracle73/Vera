@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your Bag · Vera</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="announce">Secure checkout powered by Paystack</div>
+  <div class="wrap">
+    <header class="header">
+      <a href="/" class="logo">vera</a>
+      <nav class="nav">
+        <a href="/#shop">Keep shopping</a>
+        <a href="/cart.html" class="bag-link">Bag <span class="bag-count">0</span></a>
+      </nav>
+    </header>
+
+    <section class="checkout">
+      <div class="panel">
+        <h2>Your bag</h2>
+        <div id="lines"></div>
+        <div class="totals"><span>Total</span><span id="total">—</span></div>
+      </div>
+
+      <form class="panel" id="form" novalidate>
+        <h2>Checkout</h2>
+        <label class="field">Full name<input name="name" autocomplete="name" required /></label>
+        <label class="field">Email<input name="email" type="email" autocomplete="email" required /></label>
+        <label class="field">Phone<input name="phone" type="tel" autocomplete="tel" /></label>
+        <label class="field">Delivery address<textarea name="address" rows="3" autocomplete="street-address"></textarea></label>
+        <p class="error" id="err"></p>
+        <button class="btn block" id="pay" type="submit">Pay with Paystack</button>
+      </form>
+    </section>
+    <footer class="footer">© Vera Wellness · Secure payments by Paystack</footer>
+  </div>
+
+  <script src="/app.js"></script>
+  <script type="module" src="/voice.js"></script>
+  <script>
+    const linesEl = document.getElementById("lines");
+
+    function render() {
+      const items = Vera.readCart();
+      if (!items.length) {
+        linesEl.innerHTML = `<p class="empty">Your bag is empty. <a href="/#shop"><u>Start shopping</u></a></p>`;
+      } else {
+        linesEl.innerHTML = items.map((i) => `<div class="line">
+          <div class="mini" style="${Vera.tint(i.color)}">${Vera.art(i, false)}</div>
+          <div>
+            <h4>${Vera.esc(i.name)}</h4>
+            <div class="qty"><button data-d="-1" data-id="${i.id}">−</button><span>${i.quantity}</span><button data-d="1" data-id="${i.id}">+</button></div>
+            <button class="remove" data-rm="${i.id}">Remove</button>
+          </div>
+          <strong>${Vera.money(i.price * i.quantity)}</strong>
+        </div>`).join("");
+      }
+      document.getElementById("total").textContent = Vera.money(items.reduce((s, i) => s + i.price * i.quantity, 0));
+      document.getElementById("pay").disabled = !items.length;
+    }
+
+    linesEl.addEventListener("click", (e) => {
+      const items = Vera.readCart();
+      const b = e.target.closest("button");
+      if (!b) return;
+      if (b.dataset.rm) Vera.writeCart(items.filter((i) => i.id !== b.dataset.rm));
+      else {
+        const it = items.find((i) => i.id === b.dataset.id);
+        it.quantity = Math.max(1, Math.min(99, it.quantity + Number(b.dataset.d)));
+        Vera.writeCart(items);
+      }
+      render();
+    });
+
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("err");
+      const btn = document.getElementById("pay");
+      const f = new FormData(e.target);
+      err.textContent = "";
+      btn.disabled = true;
+      btn.textContent = "Redirecting to Paystack…";
+      try {
+        const data = await Vera.api("/api/shop/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: f.get("name"),
+            email: f.get("email"),
+            phone: f.get("phone"),
+            address: f.get("address") ? { line1: f.get("address") } : null,
+            items: Vera.readCart().map((i) => ({ productId: i.id, quantity: i.quantity })),
+          }),
+        });
+        location.href = data.checkoutUrl;
+      } catch (ex) {
+        err.textContent = ex.message;
+        btn.disabled = false;
+        btn.textContent = "Pay with Paystack";
+      }
+    });
+
+    Vera.init().then(render);
+  </script>
+</body>
+</html>

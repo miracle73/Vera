@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vera Wellness Shop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="announce">Free delivery on orders over ₦50,000 · Use code WELCOME10 for 10% off</div>
+
+  <div class="wrap">
+    <header class="header">
+      <a href="/" class="logo">vera</a>
+      <nav class="nav">
+        <a href="#shop" class="hide-sm">Shop all</a>
+        <a href="#shop" data-cat="skin" class="hide-sm">Skin</a>
+        <a href="#shop" data-cat="hair" class="hide-sm">Hair</a>
+        <a href="/cart.html" class="bag-link">Bag <span class="bag-count">0</span></a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="hero-visual">
+        <h1>Wellness,<br />personalized to you</h1>
+        <p>Find vitamins, skincare and weight support designed around your lifestyle and goals, delivered to your door.</p>
+        <svg viewBox="0 0 360 220" aria-hidden="true">
+          <ellipse cx="180" cy="208" rx="170" ry="12" fill="#000" opacity=".15" />
+          <rect x="120" y="38" width="120" height="22" rx="8" fill="#eef3df" />
+          <rect x="110" y="56" width="140" height="150" rx="28" fill="#d9e4b8" />
+          <text x="180" y="140" text-anchor="middle" font-family="DM Sans" font-size="15" font-weight="600" fill="#3b3b2f">daily glow</text>
+          <rect x="36" y="128" width="54" height="78" rx="14" fill="#f3cfd4" />
+          <rect x="48" y="112" width="30" height="20" rx="6" fill="#fff" />
+          <circle cx="300" cy="170" r="34" fill="#c8d98f" />
+          <circle cx="282" cy="182" r="26" fill="#b7cc79" />
+        </svg>
+      </div>
+
+      <div class="hero-panel">
+        <div class="steps"><span class="on">1</span><span>2</span><span>3</span></div>
+        <h2>What would you like to focus on?</h2>
+        <div class="pills" id="goals">
+          <button class="pill" data-cat="vitamins">Energy &amp; better sleep</button>
+          <button class="pill" data-cat="skin">Clearer, glowing skin</button>
+          <button class="pill" data-cat="hair">Fuller hair</button>
+          <button class="pill" data-cat="weight">Reach my weight goals</button>
+          <button class="pill" data-cat="">All of the above</button>
+        </div>
+        <p class="fine">These products are not intended to diagnose, treat, cure or prevent any disease. Speak to a doctor before starting any supplement.</p>
+      </div>
+    </section>
+
+    <section id="shop">
+      <div class="section-head">
+        <h3 id="shop-title">Shop all</h3>
+        <input class="search" id="search" type="search" placeholder="Search products" aria-label="Search products" />
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="grid" id="grid"><p class="empty">Loading products…</p></div>
+    </section>
+
+    <footer class="footer">© Vera Wellness · Secure payments by Paystack</footer>
+  </div>
+
+  <aside class="promo" id="promo">
+    <div class="thumb">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.6" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" /></svg>
+    </div>
+    <div>
+      <h5>Prefer to shop by voice?</h5>
+      <p>Talk to Vera, our voice assistant, to find products and place your order.</p>
+      <button class="btn" type="button" onclick="window.VeraVoice && window.VeraVoice.toggle()">Talk to Vera</button>
+    </div>
+    <button class="x" id="promo-x" aria-label="Close">✕</button>
+  </aside>
+
+  <script src="/app.js"></script>
+  <script type="module" src="/voice.js"></script>
+  <script>
+    const state = { category: "", q: "" };
+    const grid = document.getElementById("grid");
+    let products = [];
+
+    function cardHtml(p) {
+      return `<article class="card">
+        <a class="art" href="/product.html?id=${p.id}" style="${Vera.tint(p.color)}">${Vera.art(p)}</a>
+        <div class="body">
+          <span class="tag">${Vera.esc(p.category)}</span>
+          <a href="/product.html?id=${p.id}"><h4>${Vera.esc(p.name)}</h4></a>
+          <p class="tagline">${Vera.esc(p.tagline)}</p>
+          <div class="row">
+            <span class="price">${Vera.money(p.price)}</span>
+            <button class="add" data-id="${p.id}" ${p.stock < 1 ? "disabled" : ""}>${p.stock < 1 ? "Sold out" : "Add to bag"}</button>
+          </div>
+        </div>
+      </article>`;
+    }
+
+    let loadSeq = 0;
+    async function load() {
+      const seq = ++loadSeq;
+      const params = new URLSearchParams();
+      if (state.category) params.set("category", state.category);
+      if (state.q) params.set("q", state.q);
+      try {
+        const data = await Vera.api("/api/shop/products?" + params);
+        if (seq !== loadSeq) return; // a newer filter/search superseded this one
+        products = data.products;
+        renderChips(data.categories);
+        grid.innerHTML = products.length ? products.map(cardHtml).join("") : `<p class="empty">No products match your search.</p>`;
+        document.getElementById("shop-title").textContent = state.category ? state.category[0].toUpperCase() + state.category.slice(1) : "Shop all";
+      } catch (e) {
+        grid.innerHTML = `<p class="empty">${Vera.esc(e.message)}</p>`;
+      }
+    }
+
+    let chipsRendered = false;
+    function renderChips(categories) {
+      const chips = document.getElementById("chips");
+      if (!chipsRendered && !state.category && !state.q) {
+        chips.innerHTML = ["", ...categories].map((c) => `<button class="chip" data-cat="${Vera.esc(c)}">${c ? Vera.esc(c) : "All"}</button>`).join("");
+        chipsRendered = true;
+      }
+      chips.querySelectorAll(".chip").forEach((b) => b.classList.toggle("on", b.dataset.cat === state.category));
+    }
+
+    function pick(category, scroll) {
+      state.category = category;
+      document.querySelectorAll("#goals .pill").forEach((b) => b.classList.toggle("on", b.dataset.cat === category));
+      load();
+      if (scroll) document.getElementById("shop").scrollIntoView({ behavior: "smooth" });
+    }
+
+    document.addEventListener("click", (e) => {
+      const el = e.target.closest("[data-cat]");
+      if (el) { e.preventDefault(); pick(el.dataset.cat, !el.classList.contains("chip")); }
+      const add = e.target.closest(".add");
+      if (add) { const p = products.find((x) => x.id === add.dataset.id); if (p) Vera.addToCart(p); }
+    });
+
+    let t;
+    document.getElementById("search").addEventListener("input", (e) => {
+      clearTimeout(t);
+      t = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250);
+    });
+
+    document.getElementById("promo-x").addEventListener("click", () => {
+      document.getElementById("promo").remove();
+      try { sessionStorage.setItem("vera_promo", "0"); } catch {}
+    });
+    try { if (sessionStorage.getItem("vera_promo") === "0") document.getElementById("promo").remove(); } catch {}
+
+    Vera.init().then(load);
+  </script>
+</body>
+</html>

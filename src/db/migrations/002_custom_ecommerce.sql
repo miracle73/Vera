@@ -3,6 +3,17 @@
 
 BEGIN;
 
+-- 001 creates Shopify-shaped orders/order_items; replace them so the
+-- CREATE TABLE IF NOT EXISTS statements below take effect.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'orders' AND column_name = 'shopify_order_id') THEN
+    DROP TABLE IF EXISTS order_items;
+    DROP TABLE IF EXISTS orders CASCADE;
+  END IF;
+END $$;
+
 -- ── Products ──
 CREATE TABLE IF NOT EXISTS products (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,3 +1,4 @@
+import path from "path";
 import express from "express";
 import cors from "cors";
 import { config } from "./config";
@@ -6,6 +7,7 @@ import { errorHandler } from "./middleware/errorHandler";
 import functionRoutes from "./routes/functions";
 import adminRoutes from "./routes/admin";
 import webhookRoutes from "./routes/webhooks";
+import shopRoutes from "./routes/shop";
 
 const app = express();
 
@@ -44,9 +46,15 @@ app.use((req, _res, next) => {
 });
 
 // ── Routes ──
+// Storefront pages
+app.use(express.static(path.join(__dirname, "..", "public")));
+
+// Public routes must be mounted before adminRoutes: its auth middleware
+// runs for every request that reaches that router.
 app.use(functionRoutes);
-app.use(adminRoutes);
+app.use(shopRoutes);
 app.use(webhookRoutes);
+app.use(adminRoutes);
 
 // ── 404 ──
 app.use((_req, res) => {

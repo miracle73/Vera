@@ -29,8 +29,8 @@ class VapiService {
         name: options.name,
         firstMessage: options.firstMessage,
         model: {
-          provider: "openai",
-          model: "gpt-4o-mini",
+          provider: "openrouter",
+          model: config.openrouter.model,
           temperature: 0.7,
           messages: [
             {
@@ -57,6 +57,9 @@ class VapiService {
             "x-vera-secret": config.vapi.apiKey,
           },
         },
+        credentials: config.openrouter.apiKey
+          ? [{ provider: "openrouter", apiKey: config.openrouter.apiKey }]
+          : undefined,
         interruptionThreshold: 500,
         endCallFunctionEnabled: true,
         transferPlan: {

@@ -51,56 +51,73 @@ router.post(
       return res.status(200).json({ ok: true });
     }
 
-    const functionName = message.functionCall?.name;
-    const args = message.functionCall?.arguments || {};
-
     sessionManager.getOrCreate(callId);
 
-    let result = "";
-
-    try {
-      switch (functionName) {
-        case "lookup-product":
-          result = await handleLookupProduct(callId, args);
-          break;
-        case "check-inventory":
-          result = await handleCheckInventory(callId, args);
-          break;
-        case "create-order":
-          result = await handleCreateOrder(callId, args);
-          break;
-        case "apply-discount":
-          result = await handleApplyDiscount(callId, args);
-          break;
-        case "confirm-order":
-          result = await handleConfirmOrder(callId, args);
-          break;
-        case "transfer-call":
-          result = await handleTransferCall(callId, args);
-          break;
-        default:
-          result = JSON.stringify({
-            success: false,
-            error: `Unknown function: ${functionName}`,
-          });
+    // Current Vapi format: "tool-calls" with a toolCallList
+    if (messageType === "tool-calls" && Array.isArray(message.toolCallList)) {
+      const results = [];
+      for (const tc of message.toolCallList) {
+        let args = tc.function?.arguments ?? {};
+        if (typeof args === "string") {
+          try { args = JSON.parse(args); } catch { args = {}; }
+        }
+        const result = await dispatchFunction(callId, tc.function?.name, args);
+        results.push({ toolCallId: tc.id, result });
       }
-    } catch (err) {
-      logger.error("Function handler error", {
-        callId,
-        functionName,
-        error: (err as Error).message,
-      });
-      result = JSON.stringify({
-        success: false,
-        error: "An error occurred processing your request. Please try again.",
-      });
+      return res.status(200).json({ results });
     }
 
-    return res.status(200).json({
-      results: [{ result }],
-    });
+    // Legacy "function-call" format
+    if (message.functionCall?.name) {
+      const result = await dispatchFunction(
+        callId,
+        message.functionCall.name,
+        message.functionCall.arguments || {}
+      );
+      return res.status(200).json({ results: [{ result }], result });
+    }
+
+    return res.status(200).json({ ok: true });
   })
 );
+
+async function dispatchFunction(
+  callId: string,
+  functionName: string,
+  args: any
+): Promise<string> {
+  try {
+    switch (functionName) {
+      case "lookup-product":
+        return await handleLookupProduct(callId, args);
+      case "check-inventory":
+        return await handleCheckInventory(callId, args);
+      case "create-order":
+        return await handleCreateOrder(callId, args);
+      case "apply-discount":
+        return await handleApplyDiscount(callId, args);
+      case "confirm-order":
+        return await handleConfirmOrder(callId, args);
+      case "transfer-call":
+        return await handleTransferCall(callId, args);
+      default:
+        return JSON.stringify({
+          success: false,
+          error: `Unknown function: ${functionName}`,
+        });
+    }
+  } catch (err) {
+    logger.error("Function handler error", {
+      callId,
+      functionName,
+      error: (err as Error).message,
+    });
+    return JSON.stringify({
+      success: false,
+      error: "An error occurred processing your request. Please try again.",
+    });
+  }
+}
 
 // ── End-of-Call Report ──
 async function handleEndOfCall(
@@ -381,6 +398,7 @@ async function handleConfirmOrder(
       orderId: dbOrderId,
       callId,
       customerName: session.customerName || "",
+      email: session.shippingAddress?.email || "",
     });
 
     if (paymentResult.success) {

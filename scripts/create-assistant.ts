@@ -212,8 +212,8 @@ async function main() {
     firstMessage:
       "Hello! I'm Vera, your order processing assistant. How can I help you today? Are you looking to place a new order?",
     model: {
-      provider: "openai",
-      model: "gpt-4o-mini",
+      provider: "openrouter",
+      model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
       temperature: 0.7,
       messages: [
         {
@@ -221,6 +221,10 @@ async function main() {
           content: SYSTEM_PROMPT,
         },
       ],
+      tools: FUNCTIONS.map((fn) => ({
+        type: "function",
+        function: fn,
+      })),
     },
     voice: {
       provider: "11labs",
@@ -229,13 +233,10 @@ async function main() {
     server: {
       url: `${publicUrl}/webhook/vapi`,
     },
-    toolCalls: FUNCTIONS.map((fn) => ({
-      type: "function",
-      function: fn,
-    })),
-    interruptionThreshold: 500,
+    credentials: process.env.OPENROUTER_API_KEY
+      ? [{ provider: "openrouter", apiKey: process.env.OPENROUTER_API_KEY }]
+      : undefined,
     endCallFunctionEnabled: true,
-    firstMessageInterruptionEnabled: true,
   };
 
   const client = axios.create({

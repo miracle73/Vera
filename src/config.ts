@@ -12,13 +12,24 @@ export const config = {
   vapi: {
     apiKey: process.env.VAPI_API_KEY || "",
     assistantId: process.env.VAPI_ASSISTANT_ID || "",
+    publicKey: process.env.VAPI_PUBLIC_KEY || "",
+  },
+
+  openrouter: {
+    apiKey: process.env.OPENROUTER_API_KEY || "",
+    model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
+  },
+
+  store: {
+    currency: process.env.STORE_CURRENCY || "NGN",
+    fallbackEmail: process.env.STORE_FALLBACK_EMAIL || "orders@vera.shop",
   },
 
   admin: {
     apiKey: process.env.ADMIN_API_KEY || "",
   },
 
-  paymentProvider: (process.env.PAYMENT_PROVIDER || "stripe") as PaymentProvider,
+  paymentProvider: (process.env.PAYMENT_PROVIDER || "paystack") as PaymentProvider,
 
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY || "",

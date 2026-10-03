@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Order Status · Vera</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="announce">Thank you for shopping with Vera</div>
+  <div class="wrap">
+    <header class="header">
+      <a href="/" class="logo">vera</a>
+      <nav class="nav"><a href="/cart.html" class="bag-link">Bag <span class="bag-count">0</span></a></nav>
+    </header>
+    <main class="status" id="status"><h1>Checking your payment…</h1></main>
+  </div>
+
+  <script src="/app.js"></script>
+  <script type="module" src="/voice.js"></script>
+  <script>
+    const el = document.getElementById("status");
+    const params = new URLSearchParams(location.search);
+    const reference = params.get("reference") || params.get("trxref");
+
+    Vera.init().then(async () => {
+      if (!reference) {
+        el.innerHTML = `<h1>No order found</h1><p>We couldn't find a payment reference.</p><a class="btn" href="/">Back to shop</a>`;
+        return;
+      }
+      try {
+        const { order } = await Vera.api("/api/shop/orders/verify?reference=" + encodeURIComponent(reference));
+        if (order.status === "paid") {
+          Vera.writeCart([]);
+          el.innerHTML = `<div class="badge">✓</div><h1>Order confirmed</h1>
+            <p>Thanks ${Vera.esc(order.customer_name || "")}! We've received your payment of ${Vera.money(order.total)}.
+            A confirmation will be sent to your email.</p>
+            <p><small>Order ${Vera.esc(order.id.slice(0, 8).toUpperCase())}</small></p>
+            <a class="btn" href="/">Continue shopping</a>`;
+        } else {
+          el.innerHTML = `<div class="badge" style="background:#f6d4cf">!</div><h1>Payment not completed</h1>
+            <p>Your payment didn't go through. Your bag is saved, so you can try again.</p>
+            <a class="btn" href="/cart.html">Return to bag</a>`;
+        }
+      } catch (e) {
+        el.innerHTML = `<h1>Something went wrong</h1><p>${Vera.esc(e.message)}</p><a class="btn" href="/">Back to shop</a>`;
+      }
+    });
+  </script>
+</body>
+</html>
