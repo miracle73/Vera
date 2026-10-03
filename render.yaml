@@ -1,0 +1,45 @@
+databases:
+  - name: vera-db
+    databaseName: vera
+    user: vera
+    plan: free
+    region: oregon
+
+services:
+  - type: web
+    name: vera-api
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: vera-db
+          property: connectionString
+      - key: NODE_ENV
+        value: production
+      - key: PUBLIC_URL
+        value: https://vera-api.onrender.com
+      - key: PAYMENT_PROVIDER
+        value: paystack
+      - key: STORE_CURRENCY
+        value: NGN
+      - key: OPENROUTER_MODEL
+        value: openai/gpt-4o-mini
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_WEBHOOK_SECRET
+        sync: false
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+      - key: VAPI_API_KEY
+        sync: false
+      - key: VAPI_ASSISTANT_ID
+        sync: false
+      - key: VAPI_PUBLIC_KEY
+        sync: false
+      - key: ADMIN_API_KEY
+        sync: false

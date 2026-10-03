@@ -177,6 +177,14 @@ async function seed(clear = false) {
   const client = await pool.connect();
 
   try {
+    if (process.argv.includes("--if-empty")) {
+      const { rows } = await client.query("SELECT COUNT(*)::int AS n FROM products");
+      if (rows[0].n > 0) {
+        console.log("Products already exist, skipping seed.");
+        return;
+      }
+    }
+
     await client.query("BEGIN");
 
     if (clear) {
