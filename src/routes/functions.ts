@@ -51,8 +51,6 @@ router.post(
       return res.status(200).json({ ok: true });
     }
 
-    sessionManager.getOrCreate(callId);
-
     // Current Vapi format: "tool-calls" with a toolCallList
     if (messageType === "tool-calls" && Array.isArray(message.toolCallList)) {
       const results = [];
@@ -81,7 +79,24 @@ router.post(
   })
 );
 
+// Session state lives in the DB so each webhook can land on any instance
 async function dispatchFunction(
+  callId: string,
+  functionName: string,
+  args: any
+): Promise<string> {
+  await sessionManager.load(callId);
+  sessionManager.getOrCreate(callId);
+  try {
+    return await runFunction(callId, functionName, args);
+  } finally {
+    await sessionManager.save(callId).catch((err) =>
+      logger.error("Failed to save call session", { callId, error: (err as Error).message })
+    );
+  }
+}
+
+async function runFunction(
   callId: string,
   functionName: string,
   args: any
@@ -136,7 +151,7 @@ async function handleEndOfCall(
     [transcript, duration, callId]
   );
 
-  sessionManager.remove(callId);
+  await sessionManager.remove(callId);
 
   logger.info("End-of-call report processed", { callId, duration });
 }

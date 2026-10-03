@@ -45,6 +45,33 @@ class SessionManager {
     return session;
   }
 
+  /** Load the latest session state from the database into memory. */
+  async load(callId: string): Promise<void> {
+    const { rows } = await queryWithRetry<{ data: CallSession }>(
+      "SELECT data FROM call_sessions WHERE call_id = $1",
+      [callId]
+    );
+    if (rows.length === 0) return;
+    const data = rows[0].data;
+    this.sessions.set(callId, {
+      ...data,
+      createdAt: new Date(data.createdAt),
+      updatedAt: new Date(data.updatedAt),
+    });
+  }
+
+  /** Write the in-memory session state to the database. */
+  async save(callId: string): Promise<void> {
+    const session = this.sessions.get(callId);
+    if (!session) return;
+    await queryWithRetry(
+      `INSERT INTO call_sessions (call_id, data, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (call_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [callId, JSON.stringify(session)]
+    );
+  }
+
   get(callId: string): CallSession | undefined {
     return this.sessions.get(callId);
   }
@@ -223,8 +250,9 @@ class SessionManager {
     );
   }
 
-  remove(callId: string): void {
+  async remove(callId: string): Promise<void> {
     this.sessions.delete(callId);
+    await queryWithRetry("DELETE FROM call_sessions WHERE call_id = $1", [callId]);
   }
 
   buildContextSummary(callId: string): string {
