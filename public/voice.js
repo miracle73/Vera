@@ -99,3 +99,13 @@ async function toggle() {
 
 btn.addEventListener("click", toggle);
 window.VeraVoice = { toggle };
+
+// Wake the backend (free Render instances sleep when idle) as soon as the page
+// opens, and keep it awake while the tab stays visible.
+function wakeBackend() {
+  fetch("/api/shop/config", { cache: "no-store" }).catch(() => {});
+}
+wakeBackend();
+setInterval(() => {
+  if (document.visibilityState === "visible") wakeBackend();
+}, 10 * 60 * 1000);
