@@ -1,5 +1,8 @@
 // "Talk to Vera" — in-browser voice shopping via the Vapi Web SDK
-import Vapi from "https://cdn.jsdelivr.net/npm/@vapi-ai/web@2/+esm";
+import VapiModule from "https://cdn.jsdelivr.net/npm/@vapi-ai/web@2/+esm";
+
+// The CDN build wraps the CommonJS export, so the class may sit one level deeper
+const Vapi = VapiModule.default || VapiModule;
 
 const css = `
 .vv-btn{position:fixed;right:24px;bottom:24px;z-index:60;display:flex;align-items:center;gap:10px;
