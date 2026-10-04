@@ -34,7 +34,8 @@ ORDER FLOW:
 1. Greet the customer warmly.
 2. Ask what they'd like to order, then use lookup-product to search the catalog.
 3. Confirm the product and quantity. If they want multiple items, collect each one.
-4. Collect their shipping address (full name, street address, city, state/province, zip, country, email, phone).
+4. Collect delivery details ONE AT A TIME, in this order: full name, phone number, email, street address, city, state. Do not ask for ZIP/postal code or country (default country is Nigeria).
+   Read the email back by spelling it out and ask the customer to confirm it.
 5. Ask if they have a discount code. If yes, use apply-discount to validate it.
 6. Suggest relevant add-ons or upgrades if appropriate (upsell step).
 7. Summarize the full order: items, quantities, discount (if any), and total.
@@ -46,7 +47,10 @@ IMPORTANT RULES:
 - If a product is out of stock, suggest alternatives.
 - If the customer wants to change an item or quantity mid-flow, accommodate gracefully.
 - If you cannot understand the customer after 2-3 attempts, or if they explicitly ask, use transfer-call to connect them with a human.
-- For orders over $500, inform the customer that the order needs manual review and you'll transfer them to a specialist.
+- Prices are in Nigerian naira. Say amounts like "17,000 naira", never dollars.
+- Customers may have Nigerian accents. If a product name sounds close to a catalog item, search for the closest match and confirm it rather than asking them to repeat.
+- After confirm-order succeeds, tell the customer a payment button has appeared on their screen (or that a payment link is ready). Never read a URL aloud.
+- Only use transfer-call if the customer explicitly asks for a human, or confirm-order returns escalated: true.
 - Be conversational, friendly, and efficient. Keep responses concise for voice.`;
 
 const FUNCTIONS = [
@@ -127,12 +131,9 @@ const FUNCTIONS = [
             "lastName",
             "address1",
             "city",
-            "province",
-            "zip",
-            "country",
             "email",
           ],
-          description: "Complete shipping address",
+          description: "Delivery address. province = Nigerian state. country defaults to Nigeria; zip is optional.",
         },
         customer_name: {
           type: "string",
@@ -204,6 +205,23 @@ const FUNCTIONS = [
   },
 ];
 
+// Product names boost speech recognition of catalog items
+const PRODUCT_NAMES = [
+  "Hair, Skin & Nails Gummies",
+  "Thickening Hair Serum",
+  "Brightening Vitamin C Serum",
+  "Daily Mineral Sunscreen",
+  "Hydrating Barrier Cream",
+  "Daily Glow Multivitamin",
+  "Deep Sleep Magnesium",
+  "Gut Balance Probiotic",
+  "Metabolism Support Blend",
+  "Plant Protein Shake",
+  "Cycle Comfort Tea",
+  "Stress Relief Ashwagandha",
+  "naira",
+];
+
 async function main() {
   const assistantId = process.env.VAPI_ASSISTANT_ID;
 
@@ -225,6 +243,12 @@ async function main() {
         type: "function",
         function: fn,
       })),
+    },
+    transcriber: {
+      provider: "deepgram",
+      model: "nova-3",
+      language: "en",
+      keyterm: PRODUCT_NAMES,
     },
     voice: {
       provider: "11labs",

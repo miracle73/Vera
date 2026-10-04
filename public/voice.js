@@ -17,6 +17,8 @@ const css = `
 .vv-panel.open{display:block}
 .vv-panel .st{color:var(--muted,#5d5a55);margin-bottom:8px}
 .vv-panel p{margin:6px 0;line-height:1.4}.vv-panel b{font-weight:600}
+.vv-pay{display:block;margin-top:10px;padding:12px;border-radius:999px;background:var(--ink,#111);color:#fff!important;
+  text-align:center;text-decoration:none!important;font-weight:600}
 .vv-panel a{color:inherit;text-decoration:underline;word-break:break-all}
 @keyframes vvp{50%{opacity:.4}}
 @media (max-width:600px){.vv-btn{right:16px;bottom:16px}.vv-panel{right:16px;bottom:80px}}
@@ -54,6 +56,21 @@ function addLine(role, text) {
   panel.scrollTop = panel.scrollHeight;
 }
 
+let paymentUrl = "";
+function showPayment(url) {
+  if (url === paymentUrl) return;
+  paymentUrl = url;
+  const a = document.createElement("a");
+  a.className = "vv-pay";
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.textContent = "Complete payment";
+  log.append(a);
+  panel.classList.add("open");
+  panel.scrollTop = panel.scrollHeight;
+}
+
 function setLive(on) {
   live = on;
   connecting = false;
@@ -75,6 +92,9 @@ async function setup() {
   vapi.on("speech-end", () => btn.classList.remove("talking"));
   vapi.on("message", (m) => {
     if (m.type === "transcript" && m.transcriptType === "final") addLine(m.role, m.transcript);
+    // confirm-order returns a Paystack checkout URL in its tool result
+    const url = JSON.stringify(m).match(/https:\/\/checkout\.paystack\.com\/[A-Za-z0-9]+/);
+    if (url) showPayment(url[0]);
   });
   vapi.on("error", (e) => {
     console.error("Vapi error", e);
@@ -92,6 +112,7 @@ async function toggle() {
   try {
     if (!vapi) await setup();
     log.innerHTML = "";
+    paymentUrl = "";
     await vapi.start(assistantId);
   } catch (e) {
     console.error(e);

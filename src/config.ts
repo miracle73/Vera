@@ -53,6 +53,6 @@ export const config = {
   },
 
   escalationOrderThreshold: parseFloat(
-    process.env.ESCALATION_ORDER_THRESHOLD || "500"
+    process.env.ESCALATION_ORDER_THRESHOLD || "5000000"
   ),
 } as const;

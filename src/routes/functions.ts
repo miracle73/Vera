@@ -16,6 +16,12 @@ import {
   TransferCallArgs,
 } from "../types";
 
+// Spoken amounts in the store currency, e.g. "17,000 naira"
+function formatMoney(amount: number): string {
+  const n = Number(amount).toLocaleString("en-US", { maximumFractionDigits: 2 });
+  return config.store.currency === "NGN" ? `${n} naira` : `${n} ${config.store.currency}`;
+}
+
 const router = Router();
 
 const vapiLimiter = createRateLimiter({
@@ -327,7 +333,7 @@ async function handleCreateOrder(
       line_total: (i.price * i.quantity).toFixed(2),
     })),
     subtotal: total.toFixed(2),
-    message: `I've added ${resolvedItems.length} item${resolvedItems.length !== 1 ? "s" : ""} to your order with a subtotal of $${total.toFixed(2)}. Would you like to apply a discount code, or shall we proceed?`,
+    message: `I've added ${resolvedItems.length} item${resolvedItems.length !== 1 ? "s" : ""} to your order with a subtotal of ${formatMoney(total)}. Would you like to apply a discount code, or shall we proceed?`,
   });
 }
 
@@ -365,7 +371,7 @@ async function handleApplyDiscount(
     discount_type: discount.type,
     discount_value: discount.value.toFixed(2),
     code: discount.title,
-    message: `Great! I've applied the discount "${code}" for $${discount.value.toFixed(2)} off your order.`,
+    message: `Great! I've applied the discount "${code}" for ${formatMoney(discount.value)} off your order.`,
   });
 }
 
@@ -401,7 +407,7 @@ async function handleConfirmOrder(
     return JSON.stringify({
       success: true,
       escalated: true,
-      message: `Your order total is $${session.total.toFixed(2)}, which requires manual verification. Let me transfer you to a specialist who can complete this order.`,
+      message: `Your order total is ${formatMoney(session.total)}, which requires manual verification. Let me transfer you to a specialist who can complete this order.`,
     });
   }
 
@@ -442,7 +448,7 @@ async function handleConfirmOrder(
         payment_provider: paymentResult.provider,
         payment_reference: paymentResult.reference,
         checkout_url: paymentResult.checkoutUrl,
-        message: `Your order has been created with a total of $${session.total.toFixed(2)}. ${paymentMsg} Is there anything else I can help you with?`,
+        message: `Your order has been created with a total of ${formatMoney(session.total)}. ${paymentMsg} Is there anything else I can help you with?`,
       });
     }
 
