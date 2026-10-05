@@ -206,6 +206,7 @@ export class SessionManager {
       session.total = Math.round(Math.max(0, subtotal + (session.shippingMethod?.price || 0) - discount) * 100) / 100;
       const order = (await client.query("INSERT INTO orders (call_id, customer_name, phone, email, shipping_address, total, payment_provider) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id", [call.id, session.customerName, session.customerPhone, session.shippingAddress?.email, JSON.stringify(session.shippingAddress), session.total, config.paymentProvider])).rows[0];
       for (const item of session.items) await client.query("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ($1,$2,$3,$4)", [order.id,item.productId,item.quantity,item.price]);
+      await client.query("INSERT INTO guest_orders (guest_token, order_id) SELECT COALESCE(owner_token,token),$1 FROM guest_sessions WHERE call_id = $2 ON CONFLICT DO NOTHING", [order.id,callId]);
       await client.query("COMMIT");
       session.dbOrderId = order.id;
       return order.id;

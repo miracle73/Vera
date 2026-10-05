@@ -31,7 +31,8 @@ btn.innerHTML = `<span class="dot"></span><span class="lbl">Talk to Vera</span>`
 const panel = document.createElement("div");
 panel.className = "vv-panel";
 panel.innerHTML = `<div class="st">Ready</div><div class="log"></div>`;
-document.body.append(panel, btn);
+document.body.append(panel);
+if (!heroButton) document.body.append(btn);
 
 const lbl = btn.querySelector(".lbl");
 const st = panel.querySelector(".st");

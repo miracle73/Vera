@@ -144,6 +144,8 @@ router.post(
         ]
       );
       orderId = orderRows[0].id;
+      const guestToken = req.headers.cookie?.split(';').map(s=>s.trim()).find(s=>s.startsWith('vera_guest='))?.slice(11);
+      if (guestToken && /^[a-f0-9]{64}$/.test(guestToken)) await client.query("INSERT INTO guest_orders (guest_token, order_id) SELECT token,$1 FROM guest_sessions WHERE token = $2 ON CONFLICT DO NOTHING", [orderId,guestToken]);
       await client.query("UPDATE orders SET checkout_key = $1 WHERE id = $2", [checkoutKey, orderId]);
 
       for (const line of lines) {

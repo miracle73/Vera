@@ -32,7 +32,7 @@ router.get('/api/guest', asyncHandler(async (_req, res) => {
 router.post('/api/guest/voice', asyncHandler(async (_req, res) => {
   // Separate capability per call so an old call cannot overwrite a new cart.
   const voiceToken = randomBytes(32).toString('hex');
-  await query('INSERT INTO guest_sessions (token, cart) SELECT $1, COALESCE(v.cart, g.cart) FROM guest_sessions g LEFT JOIN guest_sessions v ON v.token = g.voice_token WHERE g.token = $2', [voiceToken, res.locals.guestToken]);
+  await query('INSERT INTO guest_sessions (token, cart, owner_token) SELECT $1, COALESCE(v.cart, g.cart), g.token FROM guest_sessions g LEFT JOIN guest_sessions v ON v.token = g.voice_token WHERE g.token = $2', [voiceToken, res.locals.guestToken]);
   await query('UPDATE guest_sessions SET voice_token = $1 WHERE token = $2', [voiceToken, res.locals.guestToken]);
   res.json({ guestToken: voiceToken });
 }));
@@ -41,5 +41,13 @@ router.put('/api/guest/cart', asyncHandler(async (req, res) => {
   if (!Array.isArray(cart) || cart.length > 50 || cart.some(i => typeof i.id !== 'string' || !Number.isInteger(i.quantity) || i.quantity < 1 || i.quantity > 99)) return res.status(400).json({ error: 'Invalid cart' });
   await query('UPDATE guest_sessions SET cart = $1, voice_token = NULL, updated_at = NOW() WHERE token = $2', [JSON.stringify(cart), res.locals.guestToken]);
   res.json({ ok: true });
+}));
+router.get('/api/guest/history', asyncHandler(async (_req, res) => {
+  const { rows } = await query(
+    `SELECT o.id, o.status, o.total::float AS total, o.created_at, o.updated_at, o.payment_provider, o.payment_ref, o.payment_started,
+       COALESCE((SELECT json_agg(json_build_object('name',p.name,'quantity',i.quantity,'price',i.price::float)) FROM order_items i JOIN products p ON p.id = i.product_id WHERE i.order_id = o.id), '[]'::json) AS items
+     FROM orders o JOIN guest_orders g ON g.order_id = o.id WHERE g.guest_token = $1 ORDER BY o.created_at DESC LIMIT 200`, [res.locals.guestToken]);
+  res.set('Cache-Control', 'no-store');
+  res.json({ orders: rows });
 }));
 export default router;

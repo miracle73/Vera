@@ -14,7 +14,7 @@
   <div class="wrap">
     <header class="header">
       <a href="/" class="logo">vera</a>
-      <nav class="nav">
+      <nav class="nav"><a href="/purchases.html">Purchases</a><a href="/payments.html">Payments</a>
         <a href="#shop" class="hide-sm">Shop all</a>
         <a href="#shop" data-cat="skin" class="hide-sm">Skin</a>
         <a href="#shop" data-cat="hair" class="hide-sm">Hair</a>
@@ -41,7 +41,7 @@
       <div class="hero-panel">
         <h2>Shop by talking to Vera</h2>
         <p>Tell Vera what you need. She’ll find products, collect your delivery details, add them to your bag and open secure payment after you confirm.</p>
-        <button class="btn block" type="button" onclick="window.VeraVoice ? window.VeraVoice.toggle() : document.getElementById('voice-status').textContent = 'Voice is loading. You can browse below.'">Talk to Vera</button>
+        <button id="voice-start" class="btn block" type="button">Talk to Vera</button>
         <p id="voice-status" role="status"></p>
         <p>Your bag is remembered on this browser. No account needed.</p>
         <a href="#shop" class="btn" style="margin-top:16px">Can’t use voice? Browse manually</a>
@@ -61,19 +61,7 @@
     <footer class="footer">© Vera Wellness · Secure payments by Paystack</footer>
   </div>
 
-  <aside class="promo" id="promo">
-    <div class="thumb">
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.6" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" /></svg>
-    </div>
-    <div>
-      <h5>Your voice shopping assistant</h5>
-      <p>Talk to Vera, our voice assistant, to find products and place your order.</p>
-      <button class="btn" type="button" onclick="window.VeraVoice && window.VeraVoice.toggle()">Talk to Vera</button>
-    </div>
-    <button class="x" id="promo-x" aria-label="Close">✕</button>
-  </aside>
-
-  <script src="/app.js"></script>
+<script src="/app.js"></script>
   <script type="module" src="/voice.js"></script>
   <script>
     const state = { category: "", q: "" };
@@ -142,12 +130,6 @@
       clearTimeout(t);
       t = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250);
     });
-
-    document.getElementById("promo-x").addEventListener("click", () => {
-      document.getElementById("promo").remove();
-      try { sessionStorage.setItem("vera_promo", "0"); } catch {}
-    });
-    try { if (sessionStorage.getItem("vera_promo") === "0") document.getElementById("promo").remove(); } catch {}
 
     Vera.init().then(load);
   </script>
