@@ -24,6 +24,7 @@ export async function initializeTransaction(
     `${PAYSTACK_BASE}/transaction/initialize`,
     {
       amount: amountInKobo,
+      reference: "vera-" + metadata.orderId,
       email,
       currency: config.store.currency,
       callback_url: metadata.callbackUrl || `${config.publicUrl}/payment/success`,
@@ -54,8 +55,10 @@ export async function verifyWebhook(
   payload: string | Buffer,
   signature: string
 ): Promise<PaymentVerificationResult> {
+  const secret = config.paystack.webhookSecret || config.paystack.secretKey;
+  if (!secret) throw new Error("Paystack webhook verification is not configured");
   const hash = crypto
-    .createHmac("sha512", config.paystack.webhookSecret)
+    .createHmac("sha512", secret)
     .update(payload)
     .digest("hex");
 

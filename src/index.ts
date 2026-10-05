@@ -8,6 +8,7 @@ import functionRoutes from "./routes/functions";
 import adminRoutes from "./routes/admin";
 import webhookRoutes from "./routes/webhooks";
 import shopRoutes from "./routes/shop";
+import guestRoutes from "./routes/guest";
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 // runs for every request that reaches that router.
 app.use(functionRoutes);
 app.use(shopRoutes);
+app.use(guestRoutes);
 app.use(webhookRoutes);
 app.use(adminRoutes);
 

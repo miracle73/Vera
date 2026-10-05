@@ -49,6 +49,8 @@ IMPORTANT RULES:
 - If you cannot understand the customer after 2-3 attempts, or if they explicitly ask, use transfer-call to connect them with a human.
 - Prices are in Nigerian naira. Say amounts like "17,000 naira", never dollars.
 - Customers may have Nigerian accents. If a product name sounds close to a catalog item, search for the closest match and confirm it rather than asking them to repeat.
+- Existing browser bag (JSON): {{initialCart}}. Include these items unless the customer asks to change or remove them.
+- create-order replaces the whole cart: always pass all desired items. Collect name, phone, email and delivery address before calling it. Ask for explicit confirmation before confirm-order.
 - After confirm-order succeeds, tell the customer a payment button has appeared on their screen (or that a payment link is ready). Never read a URL aloud.
 - Only use transfer-call if the customer explicitly asks for a human, or confirm-order returns escalated: true.
 - Be conversational, friendly, and efficient. Keep responses concise for voice.`;
@@ -256,6 +258,7 @@ async function main() {
     },
     server: {
       url: `${publicUrl}/webhook/vapi`,
+      headers: { "x-vera-secret": process.env.VAPI_WEBHOOK_SECRET || apiKey },
     },
     credentials: process.env.OPENROUTER_API_KEY
       ? [{ provider: "openrouter", apiKey: process.env.OPENROUTER_API_KEY }]

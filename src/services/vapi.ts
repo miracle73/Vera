@@ -54,7 +54,7 @@ class VapiService {
         server: {
           url: `${process.env.PUBLIC_URL || "http://localhost:3000"}/webhook/vapi`,
           headers: {
-            "x-vera-secret": config.vapi.apiKey,
+            "x-vera-secret": config.vapi.webhookSecret,
           },
         },
         credentials: config.openrouter.apiKey

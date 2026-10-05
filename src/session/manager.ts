@@ -1,5 +1,5 @@
 import { CallSession, OrderFlowStep, OrderItem, ShippingAddress, ShippingMethod } from "../types";
-import { queryWithRetry } from "../db";
+import { queryWithRetry, query, getClient } from "../db";
 import { logger } from "../middleware/requestLogger";
 
 const VALID_TRANSITIONS: Record<OrderFlowStep, OrderFlowStep[]> = {
@@ -16,7 +16,7 @@ const VALID_TRANSITIONS: Record<OrderFlowStep, OrderFlowStep[]> = {
   completed: [],
 };
 
-class SessionManager {
+export class SessionManager {
   private sessions = new Map<string, CallSession>();
 
   getOrCreate(callId: string): CallSession {
@@ -169,46 +169,47 @@ class SessionManager {
     return rows[0].id;
   }
 
-  async persistOrder(callId: string): Promise<string> {
+  async persistOrder(callId: string, clientFactory = getClient): Promise<string> {
     const session = this.get(callId);
     if (!session) throw new Error("No session found for callId");
 
-    const callRecord = await queryWithRetry<{ id: string }>(
-      "SELECT id FROM calls WHERE vapi_call_id = $1",
-      [callId]
-    );
-    if (callRecord.rows.length === 0) {
-      throw new Error("No call record found for callId");
-    }
-    const dbCallId = callRecord.rows[0].id;
-
-    const { rows: orderRows } = await queryWithRetry<{ id: string }>(
-      `INSERT INTO orders (call_id, customer_name, phone, shipping_address,
-         status, total, payment_provider, payment_ref)
-       VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7)
-       RETURNING id`,
-      [
-        dbCallId,
-        session.customerName || null,
-        session.customerPhone || null,
-        session.shippingAddress ? JSON.stringify(session.shippingAddress) : null,
-        session.total,
-        config.paymentProvider,
-        null,
-      ]
-    );
-    const orderId = orderRows[0].id;
-
-    for (const item of session.items) {
-      await queryWithRetry(
-        `INSERT INTO order_items (order_id, product_id, quantity, price)
-         VALUES ($1, $2, $3, $4)`,
-        [orderId, item.productId, item.quantity, item.price]
-      );
-    }
-
-    session.dbOrderId = orderId;
-    return orderId;
+    const client = await clientFactory();
+    try {
+      await client.query("BEGIN");
+      const call = (await client.query("INSERT INTO calls (vapi_call_id, status) VALUES ($1, 'active') ON CONFLICT (vapi_call_id) DO UPDATE SET vapi_call_id = EXCLUDED.vapi_call_id RETURNING id", [callId])).rows[0];
+      await client.query("SELECT id FROM calls WHERE id = $1 FOR UPDATE", [call.id]);
+      const existing = (await client.query("SELECT * FROM orders WHERE call_id = $1", [call.id])).rows[0];
+      if (existing) {
+        const lines = await client.query("SELECT i.product_id AS \"productId\", p.name AS title, i.quantity, i.price::float AS price FROM order_items i JOIN products p ON p.id = i.product_id WHERE i.order_id = $1", [existing.id]);
+        await client.query("COMMIT");
+        session.dbOrderId = existing.id;
+        session.items = lines.rows;
+        session.total = Number(existing.total);
+        session.customerName = existing.customer_name;
+        session.customerPhone = existing.phone;
+        session.shippingAddress = existing.shipping_address;
+        return existing.id;
+      }
+      let subtotal = 0;
+      for (const item of [...session.items].sort((a,b) => a.productId.localeCompare(b.productId))) {
+        const result = await client.query("UPDATE products SET stock = stock - $1, updated_at = NOW() WHERE id = $2 AND active = TRUE AND stock >= $1 RETURNING price", [item.quantity, item.productId]);
+        if (!result.rows[0]) throw new Error("Insufficient stock for " + item.title);
+        item.price = Number(result.rows[0].price);
+        subtotal += item.price * item.quantity;
+      }
+      let discount = 0;
+      if (session.discountCode) {
+        const d = (await client.query("SELECT * FROM discounts WHERE code = $1 AND active = TRUE AND (expires_at IS NULL OR expires_at > NOW())", [session.discountCode.toUpperCase()])).rows[0];
+        if (d) discount = d.type === 'percentage' ? subtotal * Number(d.value) / 100 : Number(d.value);
+      }
+      session.subtotal = subtotal;
+      session.total = Math.round(Math.max(0, subtotal + (session.shippingMethod?.price || 0) - discount) * 100) / 100;
+      const order = (await client.query("INSERT INTO orders (call_id, customer_name, phone, email, shipping_address, total, payment_provider) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id", [call.id, session.customerName, session.customerPhone, session.shippingAddress?.email, JSON.stringify(session.shippingAddress), session.total, config.paymentProvider])).rows[0];
+      for (const item of session.items) await client.query("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ($1,$2,$3,$4)", [order.id,item.productId,item.quantity,item.price]);
+      await client.query("COMMIT");
+      session.dbOrderId = order.id;
+      return order.id;
+    } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
   }
 
   async updateOrderPayment(

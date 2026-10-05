@@ -8,9 +8,11 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || "development",
   logLevel: process.env.LOG_LEVEL || "info",
   publicUrl: process.env.PUBLIC_URL || "http://localhost:3000",
+  frontendUrl: process.env.FRONTEND_URL || (process.env.NODE_ENV === "production" ? "https://vera-two-swart.vercel.app" : process.env.PUBLIC_URL || "http://localhost:3000"),
 
   vapi: {
     apiKey: process.env.VAPI_API_KEY || "",
+    webhookSecret: process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_API_KEY || "",
     assistantId: process.env.VAPI_ASSISTANT_ID || "",
     publicKey: process.env.VAPI_PUBLIC_KEY || "",
   },

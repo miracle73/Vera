@@ -1,8 +1,9 @@
 import { Router, Request, Response } from "express";
 import { query, getClient } from "../db";
 import { config } from "../config";
-import { createPayment } from "../payments";
+import { paymentForOrder } from "../services/checkout";
 import { verifyTransaction } from "../payments/paystack";
+import { verifyTransaction as verifyStripeTransaction } from "../payments/stripe";
 import { asyncHandler } from "../middleware/errorHandler";
 import { createRateLimiter } from "../middleware/rateLimiter";
 import { logger } from "../middleware/requestLogger";
@@ -86,27 +87,43 @@ router.post(
       return res.status(400).json({ error: "Name is required" });
     }
 
+    const checkoutKey = req.get("x-checkout-key");
+    if (!checkoutKey || !/^[a-f0-9-]{36}$/.test(checkoutKey)) return res.status(400).json({ error: "Checkout key required" });
     const client = await getClient();
     let orderId: string;
     let total = 0;
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 1))", [checkoutKey]);
+      const previous = (await client.query("SELECT id FROM orders WHERE checkout_key = $1", [checkoutKey])).rows[0];
+      if (previous) {
+        await client.query("COMMIT");
+        const payment = await paymentForOrder(previous.id);
+        return res.json({ orderId: previous.id, checkoutUrl: payment.checkoutUrl, reference: payment.reference });
+      }
 
-      const lines: { productId: string; quantity: number; price: number }[] = [];
+      const merged = new Map<string, number>();
       for (const item of items) {
         const quantity = Number(item?.quantity);
-        if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+        if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) throw Object.assign(new Error("Invalid quantity"), { status: 400 });
+        const id = String(item?.productId);
+        merged.set(id, (merged.get(id) || 0) + quantity);
+      }
+      const lines: { productId: string; quantity: number; price: number }[] = [];
+      for (const [productId, quantity] of [...merged].sort(([a],[b]) => a.localeCompare(b))) {
+        if (quantity > 99) {
           throw Object.assign(new Error("Invalid quantity"), { status: 400 });
         }
         const { rows } = await client.query(
           "SELECT id, name, price::float AS price, stock FROM products WHERE id = $1 AND active = TRUE FOR UPDATE",
-          [String(item?.productId)]
+          [productId]
         );
         const product = rows[0];
         if (!product) throw Object.assign(new Error("A product in your bag is unavailable"), { status: 400 });
         if (product.stock < quantity) {
           throw Object.assign(new Error(`Only ${product.stock} of ${product.name} left`), { status: 400 });
         }
+        await client.query("UPDATE products SET stock = stock - $1, updated_at = NOW() WHERE id = $2", [quantity, product.id]);
         lines.push({ productId: product.id, quantity, price: product.price });
         total += product.price * quantity;
       }
@@ -127,6 +144,7 @@ router.post(
         ]
       );
       orderId = orderRows[0].id;
+      await client.query("UPDATE orders SET checkout_key = $1 WHERE id = $2", [checkoutKey, orderId]);
 
       for (const line of lines) {
         await client.query(
@@ -143,17 +161,7 @@ router.post(
       client.release();
     }
 
-    const payment = await createPayment(total, {
-      orderId,
-      email: email.trim(),
-      customerName: name.trim(),
-      callbackUrl: `${config.publicUrl}/order.html`,
-    });
-
-    await query("UPDATE orders SET payment_ref = $1, updated_at = NOW() WHERE id = $2", [
-      payment.reference,
-      orderId,
-    ]);
+    const payment = await paymentForOrder(orderId);
 
     logger.info("Web order created", { orderId, total });
     res.json({ orderId, checkoutUrl: payment.checkoutUrl, reference: payment.reference });
@@ -168,14 +176,14 @@ router.get(
     if (!reference) return res.status(400).json({ error: "reference is required" });
 
     const { rows } = await query(
-      "SELECT id, status, total::float AS total, customer_name FROM orders WHERE payment_ref = $1",
+      "SELECT id, status, total::float AS total, customer_name, payment_provider FROM orders WHERE payment_ref = $1",
       [reference]
     );
     const order = rows[0];
     if (!order) return res.status(404).json({ error: "Order not found" });
 
     if (order.status === "pending") {
-      const result = await verifyTransaction(reference);
+      const result = await (order.payment_provider === "stripe" ? verifyStripeTransaction(reference) : verifyTransaction(reference));
       if (result.success) {
         await query(
           "UPDATE orders SET status = 'paid', updated_at = NOW() WHERE id = $1 AND status = 'pending'",

@@ -4,7 +4,7 @@ import { logger } from "./requestLogger";
 
 export function adminAuth(req: Request, res: Response, next: NextFunction) {
   if (!config.admin.apiKey) {
-    return next();
+    return res.status(503).json({ error: "Admin access is not configured" });
   }
 
   const provided =

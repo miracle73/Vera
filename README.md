@@ -294,3 +294,13 @@ docker-compose up -d
 ## License
 
 MIT
+
+## Voice-first guest checkout
+
+The homepage leads with voice shopping, with manual browsing available below. A first-party, HttpOnly guest cookie remembers the bag on the same browser without login. Voice orders use a per-call capability to synchronize products and delivery details into the bag. After explicit confirmation, the browser opens hosted Paystack or Stripe checkout in the same tab.
+
+Apply database migration 005 with `npm run migrate`, configure `ADMIN_API_KEY` and `VAPI_WEBHOOK_SECRET` (falls back to `VAPI_API_KEY`), then run `npm run create-assistant` to update the assistant's secret header and shopping instructions. Set `PUBLIC_URL` to the backend origin and `FRONTEND_URL` to the website origin. For this deployment these are https://vera-api-jjts.onrender.com and https://vera-two-swart.vercel.app respectively. Vercel proxies /api requests to Render; Vapi calls Render directly, and payment returns to Vercel. Configure Stripe webhooks for `checkout.session.completed` and `checkout.session.async_payment_succeeded`.
+
+Stock is reserved atomically when an order is confirmed. Repeated confirmations reuse its order/payment. A payment initialization with an uncertain outcome is deliberately blocked from automatically creating another payment: reconcile it with the provider using the order ID (Paystack reference: vera-ORDER_ID). Pending reservations currently require operational follow-up; automatic abandonment expiry/restocking is not implemented.
+
+Guest recognition applies only to this browser and is lost if its cookies are cleared. No account or cross-device identification is provided.

@@ -12,6 +12,8 @@ services:
         value: production
       - key: PUBLIC_URL
         value: https://vera-api-jjts.onrender.com
+      - key: FRONTEND_URL
+        value: https://vera-two-swart.vercel.app
       - key: PAYMENT_PROVIDER
         value: paystack
       - key: STORE_CURRENCY

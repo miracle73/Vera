@@ -17,7 +17,7 @@ export function createRateLimiter(opts: {
     for (const [key, entry] of hits) {
       if (now > entry.resetAt) hits.delete(key);
     }
-  }, opts.windowMs);
+  }, opts.windowMs).unref();
 
   return (req: Request, res: Response, next: NextFunction) => {
     const key = req.ip || req.socket.remoteAddress || "unknown";

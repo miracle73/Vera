@@ -85,9 +85,11 @@
       btn.disabled = true;
       btn.textContent = "Redirecting to Paystack…";
       try {
+        const existing = Vera.guest()?.order;
+        if (existing?.checkout_url && existing.status === "pending") { location.href = existing.checkout_url; return; }
         const data = await Vera.api("/api/shop/checkout", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "x-checkout-key": Vera.checkoutKey() },
           body: JSON.stringify({
             name: f.get("name"),
             email: f.get("email"),
@@ -104,7 +106,14 @@
       }
     });
 
-    Vera.init().then(render);
+    window.addEventListener("vera-cart", render);
+    window.addEventListener("storage", (event) => { if (event.key === "vera_cart") Vera.syncGuest().catch(() => {}); });
+    Vera.init().then(() => {
+      render();
+      const details = Vera.guest()?.details;
+      if (details) for (const key of ["name", "email", "phone"]) document.querySelector(`[name="${key}"]`).value = details[key] || "";
+      if (details?.address) document.querySelector("[name=address]").value = [details.address.address1, details.address.city, details.address.province].filter(Boolean).join(", ");
+    });
   </script>
 </body>
 </html>

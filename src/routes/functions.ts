@@ -1,8 +1,9 @@
 import { Router, Request, Response } from "express";
 import { products } from "../services/products";
-import { createPayment } from "../payments";
 import { sessionManager } from "../session/manager";
-import { query } from "../db";
+import { query, withCallLock } from "../db";
+import { timingSafeEqual } from "crypto";
+import { paymentForOrder } from "../services/checkout";
 import { config } from "../config";
 import { logger } from "../middleware/requestLogger";
 import { asyncHandler } from "../middleware/errorHandler";
@@ -35,6 +36,10 @@ router.post(
   "/webhook/vapi",
   vapiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
+    const secret = config.vapi.webhookSecret;
+    const provided = req.get("x-vera-secret") || "";
+    if (!secret) return res.status(503).json({ error: "Voice webhook is not configured" });
+    if (Buffer.byteLength(secret) !== Buffer.byteLength(provided) || !timingSafeEqual(Buffer.from(secret), Buffer.from(provided))) return res.status(401).json({ error: "Unauthorized" });
     const body = req.body;
     const message = body.message;
 
@@ -42,7 +47,12 @@ router.post(
       return res.status(200).json({ ok: true });
     }
 
-    const callId = message.call?.id || "unknown";
+    const callId = message.call?.id;
+    if (typeof callId !== "string" || !callId || callId.length > 255) return res.status(400).json({ error: "Call ID required" });
+    const guestToken = message.call?.assistantOverrides?.variableValues?.guestToken;
+    if (typeof guestToken === "string" && /^[a-f0-9]{64}$/.test(guestToken)) {
+      await query("UPDATE guest_sessions SET call_id = $1, updated_at = NOW() WHERE token = $2 AND (call_id IS NULL OR call_id = $1)", [callId, guestToken]);
+    }
     const messageType = message.type;
 
     logger.info("Vapi webhook received", {
@@ -53,7 +63,7 @@ router.post(
 
     // Handle end-of-call-report separately
     if (messageType === "end-of-call-report") {
-      await handleEndOfCall(callId, message);
+      await withCallLock(callId, () => handleEndOfCall(callId, message));
       return res.status(200).json({ ok: true });
     }
 
@@ -91,15 +101,24 @@ async function dispatchFunction(
   functionName: string,
   args: any
 ): Promise<string> {
+  return withCallLock(callId, async () => {
   await sessionManager.load(callId);
-  sessionManager.getOrCreate(callId);
+  const active = sessionManager.getOrCreate(callId);
+  const existingOrder = (await query("SELECT o.id FROM orders o JOIN calls c ON c.id = o.call_id WHERE c.vapi_call_id = $1", [callId])).rows[0];
+  if (existingOrder) active.dbOrderId = existingOrder.id;
+  if (!active.items.length && !active.dbOrderId) {
+    const guest = (await query("SELECT cart FROM guest_sessions WHERE call_id = $1", [callId])).rows[0];
+    for (const item of guest?.cart || []) {
+      const product = await products.getById(item.id);
+      if (product) sessionManager.addItem(callId, { productId: product.id, title: product.name, price: Number(product.price), quantity: item.quantity });
+    }
+  }
   try {
     return await runFunction(callId, functionName, args);
   } finally {
-    await sessionManager.save(callId).catch((err) =>
-      logger.error("Failed to save call session", { callId, error: (err as Error).message })
-    );
+    await sessionManager.save(callId);
   }
+  });
 }
 
 async function runFunction(
@@ -157,7 +176,8 @@ async function handleEndOfCall(
     [transcript, duration, callId]
   );
 
-  await sessionManager.remove(callId);
+  // Retain session/cart so ending the call does not discard checkout.
+  await query("UPDATE calls SET status = 'completed' WHERE vapi_call_id = $1", [callId]);
 
   logger.info("End-of-call report processed", { callId, duration });
 }
@@ -278,6 +298,9 @@ async function handleCreateOrder(
     });
   }
 
+  const current = sessionManager.getOrCreate(callId);
+  if (current.dbOrderId) return JSON.stringify({ success: false, error: "This order is already confirmed. Complete its payment first." });
+  if (!Array.isArray(items) || items.length > 50 || !customer_name?.trim() || !customer_phone?.trim() || !shipping_address.address1?.trim() || !shipping_address.city?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(shipping_address.email || "")) return JSON.stringify({ success: false, error: "Please provide name, phone, email, street address and city." });
   let total = 0;
   const resolvedItems: Array<{
     productId: string;
@@ -286,7 +309,13 @@ async function handleCreateOrder(
     price: number;
   }> = [];
 
+  const quantities = new Map<string, number>();
   for (const item of items) {
+    if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) return JSON.stringify({ success: false, error: "Quantity must be between 1 and 99." });
+    quantities.set(item.product_id, (quantities.get(item.product_id) || 0) + item.quantity);
+  }
+  for (const [product_id, quantity] of quantities) {
+    const item = { product_id, quantity };
     const product = await products.getById(item.product_id);
     if (!product) {
       return JSON.stringify({
@@ -310,6 +339,7 @@ async function handleCreateOrder(
     });
   }
 
+  current.items = [];
   for (const item of resolvedItems) {
     sessionManager.addItem(callId, item);
   }
@@ -351,7 +381,8 @@ async function handleApplyDiscount(
   }
 
   const session = sessionManager.get(callId);
-  const total = order_total || session?.subtotal || 0;
+  if (session?.dbOrderId) return JSON.stringify({ success: false, error: "Order already confirmed; its total cannot be changed." });
+  const total = session?.subtotal || 0;
 
   const discount = await products.validateDiscountCode(code, total);
 
@@ -395,6 +426,7 @@ async function handleConfirmOrder(
     });
   }
 
+  if (!session.customerName || !session.customerPhone || !session.shippingAddress?.address1 || !session.shippingAddress?.email) return JSON.stringify({ success: false, error: "Collect name, phone, delivery address and email before confirming." });
   if (session.total >= config.escalationOrderThreshold) {
     sessionManager.transition(callId, "summary");
     const contextSummary = sessionManager.buildContextSummary(callId);
@@ -415,12 +447,10 @@ async function handleConfirmOrder(
     const dbOrderId = await sessionManager.persistOrder(callId);
     session.dbOrderId = dbOrderId;
 
-    const paymentResult = await createPayment(session.total, {
-      orderId: dbOrderId,
-      callId,
-      customerName: session.customerName || "",
-      email: session.shippingAddress?.email || "",
-    });
+    await query("UPDATE guest_sessions SET cart = $1 WHERE call_id = $2", [JSON.stringify(session.items.map(i => ({ id: i.productId, name: i.title, price: i.price, quantity: i.quantity }))), callId]);
+    await sessionManager.save(callId);
+    const paymentResult = await paymentForOrder(dbOrderId);
+
 
     if (paymentResult.success) {
       await sessionManager.updateOrderPayment(

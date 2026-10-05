@@ -10,7 +10,7 @@
     "migrate": "ts-node src/db/migrate.ts",
     "seed": "ts-node scripts/seed.ts",
     "seed:clear": "ts-node scripts/seed.ts --clear",
-    "test": "tsx --test src/__tests__/session.test.ts",
+    "test": "tsx --test src/__tests__/*.test.ts",
     "lint": "tsc --noEmit",
     "create-assistant": "ts-node scripts/create-assistant.ts"
   },

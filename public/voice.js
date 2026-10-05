@@ -41,6 +41,19 @@ let vapi = null;
 let assistantId = "";
 let live = false;
 let connecting = false;
+let pollTimer;
+let navigating = false;
+async function syncVoice() {
+  try {
+    const guest = await Vera.syncGuest();
+    if (guest.order?.checkout_url && guest.order.status === "pending" && !navigating) {
+      navigating = true;
+      showPayment(guest.order.checkout_url);
+      if (vapi) vapi.stop();
+      location.assign(guest.order.checkout_url);
+    }
+  } catch {}
+}
 
 function setStatus(text) { st.textContent = text; }
 
@@ -86,15 +99,15 @@ async function setup() {
   assistantId = cfg.vapiAssistantId;
   vapi = new Vapi(cfg.vapiPublicKey);
 
-  vapi.on("call-start", () => setLive(true));
-  vapi.on("call-end", () => setLive(false));
+  vapi.on("call-start", () => { setLive(true); pollTimer = setInterval(syncVoice, 1500); syncVoice(); });
+  vapi.on("call-end", () => { setLive(false); clearInterval(pollTimer); syncVoice(); });
   vapi.on("speech-start", () => btn.classList.add("talking"));
   vapi.on("speech-end", () => btn.classList.remove("talking"));
   vapi.on("message", (m) => {
     if (m.type === "transcript" && m.transcriptType === "final") addLine(m.role, m.transcript);
     // confirm-order returns a Paystack checkout URL in its tool result
     const url = JSON.stringify(m).match(/https:\/\/checkout\.paystack\.com\/[A-Za-z0-9]+/);
-    if (url) showPayment(url[0]);
+    if (url) syncVoice();
   });
   vapi.on("error", (e) => {
     console.error("Vapi error", e);
@@ -113,7 +126,8 @@ async function toggle() {
     if (!vapi) await setup();
     log.innerHTML = "";
     paymentUrl = "";
-    await vapi.start(assistantId);
+    const voiceSession = await Vera.api("/api/guest/voice", { method: "POST" });
+    await vapi.start(assistantId, { variableValues: { guestToken: voiceSession.guestToken, initialCart: JSON.stringify(Vera.readCart()) } });
   } catch (e) {
     console.error(e);
     connecting = false;
@@ -123,6 +137,18 @@ async function toggle() {
 
 btn.addEventListener("click", toggle);
 window.VeraVoice = { toggle };
+const bagPreview = document.createElement('div');
+panel.append(bagPreview);
+window.addEventListener('vera-cart', () => {
+  bagPreview.replaceChildren();
+  const items = Vera.readCart();
+  if (!items.length) return;
+  const heading = document.createElement('strong'); heading.textContent = 'Your bag'; bagPreview.append(heading);
+  for (const item of items) {
+    const line = document.createElement('p'); line.textContent = item.quantity + ' × ' + item.name + ' — ' + Vera.money(item.price * item.quantity); bagPreview.append(line);
+  }
+  const link = document.createElement('a'); link.href = '/cart.html'; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'View bag'; bagPreview.append(link);
+});
 
 // Wake the backend (free Render instances sleep when idle) as soon as the page
 // opens, and keep it awake while the tab stays visible.

@@ -1,4 +1,16 @@
-import { Pool, PoolConfig } from "pg";
+import { Pool, PoolConfig, PoolClient } from "pg";
+import { AsyncLocalStorage } from "node:async_hooks";
+const connection = new AsyncLocalStorage<PoolClient>();
+export async function withCallLock<T>(callId: string, work: () => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [callId]);
+    return await connection.run(client, work);
+  } finally {
+    await client.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [callId]).catch(() => {});
+    client.release();
+  }
+}
 import { config } from "../config";
 import { logger } from "../middleware/requestLogger";
 
@@ -24,7 +36,7 @@ export async function query<T = any>(
   params?: unknown[]
 ): Promise<{ rows: T[]; rowCount: number | null }> {
   const start = Date.now();
-  const result = await pool.query(text, params);
+  const result = await (connection.getStore() || pool).query(text, params);
   const duration = Date.now() - start;
   logger.debug("Executed query", {
     text: text.substring(0, 80),
@@ -73,8 +85,13 @@ export async function queryWithRetry<T = any>(
 }
 
 export async function getClient() {
-  const client = await pool.connect();
-  return client;
+  const scoped = connection.getStore();
+  if (scoped) return new Proxy(scoped, { get(target, key) {
+    if (key === "release") return () => {};
+    const value = Reflect.get(target, key);
+    return typeof value === "function" ? value.bind(target) : value;
+  } });
+  return pool.connect();
 }
 
 export default pool;

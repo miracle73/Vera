@@ -2,6 +2,20 @@
 const Vera = (() => {
   const CART_KEY = "vera_cart";
   let currency = "NGN";
+  let guestState = null;
+  let syncQueue = Promise.resolve();
+  function checkoutKey() {
+    let key = sessionStorage.getItem("vera_checkout_key");
+    if (!key) { key = crypto.randomUUID(); sessionStorage.setItem("vera_checkout_key", key); }
+    return key;
+  }
+  async function syncGuest() {
+    await syncQueue;
+    const data = await api("/api/guest");
+    guestState = data;
+    writeCart(data.cart, false);
+    return data;
+  }
 
   const esc = (s) =>
     String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -12,9 +26,15 @@ const Vera = (() => {
   function readCart() {
     try { return JSON.parse(localStorage.getItem(CART_KEY)) || []; } catch { return []; }
   }
-  function writeCart(items) {
+  function writeCart(items, persist = true) {
     try { localStorage.setItem(CART_KEY, JSON.stringify(items)); } catch {}
     renderBagCount();
+    window.dispatchEvent(new Event("vera-cart"));
+    if (persist) {
+      sessionStorage.removeItem("vera_checkout_key");
+      if (guestState) guestState.order = null;
+      syncQueue = syncQueue.catch(() => {}).then(() => api("/api/guest/cart", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cart: items }) })).catch(() => toast("Cart saved on this device; server sync unavailable"));
+    }
   }
   function addToCart(product, quantity = 1) {
     const items = readCart();
@@ -85,8 +105,9 @@ const Vera = (() => {
 
   async function init() {
     renderBagCount();
+    try { await syncGuest(); } catch {}
     try { currency = (await api("/api/shop/config")).currency || currency; } catch {}
   }
 
-  return { esc, money, readCart, writeCart, addToCart, art, tint, toast, api, init };
+  return { esc, money, readCart, writeCart, addToCart, art, tint, toast, api, init, syncGuest, guest: () => guestState, checkoutKey };
 })();

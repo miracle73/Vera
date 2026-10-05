@@ -36,7 +36,7 @@
           Vera.writeCart([]);
           el.innerHTML = `<div class="badge">✓</div><h1>Order confirmed</h1>
             <p>Thanks ${Vera.esc(order.customer_name || "")}! We've received your payment of ${Vera.money(order.total)}.
-            A confirmation will be sent to your email.</p>
+            Keep your order number for reference.</p>
             <p><small>Order ${Vera.esc(order.id.slice(0, 8).toUpperCase())}</small></p>
             <a class="btn" href="/">Continue shopping</a>`;
         } else {

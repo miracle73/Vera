@@ -44,7 +44,7 @@ async function runMigrations() {
     const client = await getClient();
     try {
       await client.query("BEGIN");
-      await client.query(sql);
+      await client.query(sql.replace(/^\s*(BEGIN|COMMIT);\s*$/gm, ""));
       await client.query("INSERT INTO migrations (name) VALUES ($1)", [file]);
       await client.query("COMMIT");
       logger.info(`Applied migration: ${file}`);
